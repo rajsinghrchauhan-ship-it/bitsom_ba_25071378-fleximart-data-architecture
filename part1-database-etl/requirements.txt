@@ -1,0 +1,6 @@
+# Python dependencies for FlexiMart Data Architecture Project
+pandas==2.2.0
+numpy==1.26.3
+phonenumbers==8.13.32
+mysql-connector-python==8.3.0
+python-dotenv==1.0.0

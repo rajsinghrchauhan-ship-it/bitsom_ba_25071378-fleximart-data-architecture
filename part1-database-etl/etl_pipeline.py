@@ -23,7 +23,7 @@ from dotenv import load_dotenv
 import os
 
 # Current file location
-CURRENT_DIR = Path.cwd()
+CURRENT_DIR = Path(__file__).resolve().parent
 
 # Project root directory
 PROJECT_ROOT = CURRENT_DIR.parent
@@ -88,15 +88,12 @@ def find_treat_missing_val(df: pd.DataFrame):
 # ## Inserting the data to the MYSQL database tables
 
 # %%
-import os
-import mysql.connector
-from dotenv import load_dotenv
-
+# Function to upload data to MySQL database
 def upload_data_db(df: pd.DataFrame, table_name: str):
     load_dotenv()
 
     conn = mysql.connector.connect(
-        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+        host=os.getenv("MYSQL_HOST"),
         port=int(os.getenv("MYSQL_PORT", 3306)),
         user=os.getenv("MYSQL_USER"),
         password=os.getenv("MYSQL_PASSWORD"),
@@ -193,7 +190,7 @@ prod_df_clean.head()
 # ### Transcation Data
 
 # %%
-sales_df = read_raw_data(DATA_DIR / 'sales_raw.csv')
+sales_df = read_raw_data(DATA_DIR /'sales_raw.csv')
 sales_df_clean, dq_report = find_treat_missing_val(sales_df)
 
 

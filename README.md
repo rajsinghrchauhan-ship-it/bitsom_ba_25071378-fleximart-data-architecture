@@ -27,10 +27,22 @@ This project focuses on end-to-end data engineering and analytics. It includes b
 └── README.md
 
 ## Technologies Used
-
-- Python 3.x, pandas, mysql-connector-python
-- MySQL 8.0 / PostgreSQL 14
+- Python 3.x, pandas, mysql-connector-python, phonenumbers
+- MySQL 8.0
 - MongoDB 6.0
+
+## Requirements
+- Python 3.9+
+- MySQL 8.0
+- MongoDB 6.0
+- Libraries: pandas, numpy, phonenumbers, mysql-connector-python, python-dotenv
+
+## Installation
+Install Python dependencies:
+```bash
+pip install -r part1-database-etl/requirements.txt
+```
+Ensure MySQL and MongoDB are installed and running locally or on your preferred environment.
 
 ## Setup Instructions
 
@@ -57,12 +69,22 @@ mysql -u root -p fleximart_dw < part3-datawarehouse/analytics_queries.sql
 
 mongosh < part2-nosql/mongodb_operations.js
 
-## Key Learnings
+## Workflow
+1. ETL pipeline → Load data into MySQL
+2. Schema documentation → Understand relationships
+3. Business queries → Generate insights
+4. MongoDB operations → Handle flexible product data
+5. Data warehouse → Star schema for analytics
 
-[3-4 sentences on what you learned]
+## Key Learnings
+- Learned how to design an ETL pipeline using Python and SQL.
+- Understood schema documentation and its importance in relational databases.
+- Gained experience in MongoDB for flexible data handling.
+- Designed a star schema for OLAP queries and analytics.
 
 ## Challenges Faced
-
-1. [Challenge and solution]
-2. [Challenge and solution]
+1. **Challenge:** Handling inconsistent CSV data  
+   **Solution:** Implemented data validation and cleaning in ETL script.
+2. **Challenge:** Optimizing SQL queries for large datasets  
+   **Solution:** Used indexing and query optimization techniques.
 
