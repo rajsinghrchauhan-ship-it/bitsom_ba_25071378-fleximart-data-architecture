@@ -1,95 +1,199 @@
-# etl_pipeline.py
+# ==============================
+# Imports
+# ==============================
 
-import logging
 import pandas as pd
-import numpy as np
-
-# -------------------------------------------------------------------
-# LOGGING CONFIGURATION
-# -------------------------------------------------------------------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-# -------------------------------------------------------------------
-# DATA QUALITY FUNCTIONS
-# -------------------------------------------------------------------
-
-def find_treat_missing_val(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Handle missing values in numeric and categorical columns.
-    """
-    df = df.copy()
-
-    numeric_cols = df.select_dtypes(include=["int64", "float64"]).columns
-    categorical_cols = df.select_dtypes(include=["object", "category", "bool"]).columns
-
-    for col in numeric_cols:
-        if df[col].isnull().any():
-            df[col].fillna(df[col].median(), inplace=True)
-
-    for col in categorical_cols:
-        if df[col].isnull().any():
-            df[col].fillna(df[col].mode()[0], inplace=True)
-
-    return df
+import phonenumbers
+import mysql.connector
+from dotenv import load_dotenv
+from pathlib import Path
+from datetime import datetime
+import os
 
 
-def remove_duplicates(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Remove duplicate rows from dataframe.
-    """
-    return df.drop_duplicates()
+# ==============================
+# Path Setup
+# ==============================
+
+CURRENT_DIR = Path(__file__).resolve().parent
+PROJECT_ROOT = CURRENT_DIR.parent
+
+DATA_DIR = PROJECT_ROOT / "data"
+ETL_DIR = PROJECT_ROOT / "part1-database-etl"
 
 
-# -------------------------------------------------------------------
-# EXTRACT
-# -------------------------------------------------------------------
+# ==============================
+# Utility Functions
+# ==============================
 
-def extract_data(file_path: str) -> pd.DataFrame:
-    logging.info("Extracting data")
+def read_raw_data(file_path: Path) -> pd.DataFrame:
+    if not file_path.exists():
+        raise FileNotFoundError(f"File not found: {file_path}")
     return pd.read_csv(file_path)
 
 
-# -------------------------------------------------------------------
-# TRANSFORM
-# -------------------------------------------------------------------
+def find_treat_missing_val(df: pd.DataFrame, dataset_name="Dataset"):
+    df = df.copy()
 
-def transform_data(df: pd.DataFrame) -> pd.DataFrame:
-    logging.info("Transforming data")
+    record_count = len(df)
+    duplicate_rows = df.duplicated().sum()
 
-    df = find_treat_missing_val(df)
-    df = remove_duplicates(df)
+    # Column-wise NULL count (only where > 0)
+    nulls_by_column = df.isna().sum()
+    nulls_by_column = nulls_by_column[nulls_by_column > 0]
+
+    if not nulls_by_column.empty:
+        null_summary = ", ".join(
+            f"{col}: {cnt}" for col, cnt in nulls_by_column.items()
+        )
+    else:
+        null_summary = "None"
+
+    df = df.drop_duplicates()
+    df = df.ffill()
+
+    insert_count = len(df)
+
+    dq_reports = {
+        "Dataset Name": dataset_name,
+        "Record Count": record_count,
+        "Duplicate Rows": duplicate_rows,
+        "Null Summary": null_summary,
+        "Insert Count": insert_count
+    }
+
+    return df, dq_reports
+
+
+def clean_registration_date(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+
+    date_cols = df.columns[df.columns.str.contains("date", case=False)]
+
+    if len(date_cols) > 0:
+        col = date_cols[0]
+
+        df[col] = pd.to_datetime(
+            df[col],
+            format="mixed",
+            errors="coerce",
+            dayfirst=True
+        ).dt.date
+
+        invalid_count = df[col].isna().sum()
+        if invalid_count > 0:
+            print(f"⚠️ Found {invalid_count} invalid values in `{col}`")
 
     return df
 
 
-# -------------------------------------------------------------------
-# LOAD
-# -------------------------------------------------------------------
+def generate_data_quality_report_txt(reports, file_name="data_quality_report.txt"):
+    report_path = ETL_DIR / file_name
 
-def load_data(df: pd.DataFrame, output_path: str):
-    logging.info("Loading data")
-    df.to_csv(output_path, index=False)
+    with open(report_path, "w", encoding="utf-8") as f:
+        f.write("DATA QUALITY REPORT\n")
+        f.write("=" * 60 + "\n")
+        f.write(f"Generated On: {datetime.now()}\n\n")
+
+        for idx, row in enumerate(reports, start=1):
+            f.write(f"Dataset #{idx}\n")
+            f.write(f"Records Processed      : {row['Record Count']}\n")
+            f.write(f"Duplicates Removed     : {row['Duplicate Rows']}\n")
+            f.write(f"Missing Values Handled : {row['Null Summary']}\n")
+            f.write(f"Records Loaded         : {row['Insert Count']}\n")
+            f.write("-" * 60 + "\n")
+
+    print(f"✅ Data quality report saved at {report_path}")
 
 
-# -------------------------------------------------------------------
-# MAIN PIPELINE
-# -------------------------------------------------------------------
+def upload_data_db(df: pd.DataFrame, table_name: str):
+    load_dotenv()
+
+    conn = mysql.connector.connect(
+        host=os.getenv("MYSQL_HOST", "127.0.0.1"),
+        port=int(os.getenv("MYSQL_PORT", 3306)),
+        user=os.getenv("MYSQL_USER"),
+        password=os.getenv("MYSQL_PASSWORD"),
+        database=os.getenv("MYSQL_DATABASE"),
+        use_pure=True
+    )
+
+    cursor = conn.cursor()
+
+    columns = ",".join(df.columns)
+    placeholders = ",".join(["%s"] * len(df.columns))
+    update_clause = ", ".join([f"{col}=VALUES({col})" for col in df.columns])
+
+    sql = (
+        f"INSERT INTO {table_name} ({columns}) "
+        f"VALUES ({placeholders}) "
+        f"ON DUPLICATE KEY UPDATE {update_clause}"
+    )
+
+    cursor.executemany(sql, df.values.tolist())
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    print(f"✅ Loaded / Updated {len(df)} records into `{table_name}`")
+
+
+# ==============================
+# MAIN ETL PIPELINE
+# ==============================
 
 def main():
-    logging.info("ETL pipeline started")
+    print("🚀 ETL pipeline started")
 
-    input_file = "input_data.csv"
-    output_file = "processed_data.csv"
+    # Extract
+    cust_df = read_raw_data(DATA_DIR / "customers_raw.csv")
 
-    df = extract_data(input_file)
-    df = transform_data(df)
-    load_data(df, output_file)
+    # Transform + Data Quality
+    dq_reports = []
 
-    logging.info("ETL pipeline completed successfully")
+    cust_df_clean, report = find_treat_missing_val(
+    cust_df,
+    dataset_name="Customers"
+    )
+    dq_reports.append(report)
 
+    # Phone formatting
+    cust_df_clean["phone"] = cust_df_clean["phone"].apply(
+        lambda x: phonenumbers.format_number(
+            phonenumbers.parse(str(x), region="IN"),
+            phonenumbers.PhoneNumberFormat.E164
+        ) if pd.notna(x) else None
+    )
+
+    # Customer ID formatting
+    cust_df_clean["customer_id"] = (
+        cust_df_clean["customer_id"]
+        .astype(str)
+        .str.replace(r"\D+", "", regex=True)
+    )
+
+    # Clean mixed registration_date
+    cust_df_clean = clean_registration_date(cust_df_clean)
+
+    # Remove duplicates on primary key
+    cust_df_clean = cust_df_clean.drop_duplicates(
+        subset="customer_id",
+        keep="first"
+    )
+
+    # Load
+    upload_data_db(cust_df_clean, "customers")
+
+    # Report
+    generate_data_quality_report_txt(dq_reports)
+
+    print("✅ ETL pipeline completed successfully")
+
+
+# ==============================
+# Entry Point
+# ==============================
 
 if __name__ == "__main__":
     main()

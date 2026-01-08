@@ -1,22 +1,10 @@
 DATA QUALITY REPORT
 ============================================================
-Generated On: 2026-01-01 11:27:40.805688
+Generated On: 2026-01-08 09:42:19.938713
 
 Dataset #1
 Records Processed      : 26
 Duplicates Removed     : 1
 Missing Values Handled : email: 5
 Records Loaded         : 25
-------------------------------------------------------------
-Dataset #2
-Records Processed      : 20
-Duplicates Removed     : 0
-Missing Values Handled : price: 3, stock_quantity: 1
-Records Loaded         : 20
-------------------------------------------------------------
-Dataset #3
-Records Processed      : 41
-Duplicates Removed     : 1
-Missing Values Handled : customer_id: 3, product_id: 2
-Records Loaded         : 40
 ------------------------------------------------------------
